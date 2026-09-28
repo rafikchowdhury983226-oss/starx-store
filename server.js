@@ -2,11 +2,11 @@
 const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
-const { db, hashPassword, verifyPassword, getSetting, setSetting } = require('./lib/db');
-const { createSession, destroySession, getSessionUser, rateLimit, validEmail, strongPassword } = require('./lib/auth');
+const { db, hashPassword, verifyPassword, getSetting, setSetting } = require('./db');
+const { createSession, destroySession, getSessionUser, rateLimit, validEmail, strongPassword } = require('./auth');
 
 const PORT = process.env.PORT || 3000;
-const PUBLIC_DIR = path.join(__dirname, 'public');
+const PUBLIC_DIR = __dirname;
 const MIME = { '.html':'text/html; charset=utf-8', '.css':'text/css', '.js':'text/javascript', '.png':'image/png', '.jpg':'image/jpeg', '.svg':'image/svg+xml', '.ico':'image/x-icon', '.json':'application/json' };
 
 function json(res, code, obj) { res.writeHead(code, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(obj)); }
@@ -18,7 +18,9 @@ function readBody(req) {
     req.on('error', reject);
   });
 }
+const DENY = new Set(['server.js','package.json','db.js','auth.js','README.md','render.yaml','.gitignore']);
 function serveStatic(res, file) {
+  if (DENY.has(file)) { res.writeHead(404); return res.end('Not found'); }
   const full = path.join(PUBLIC_DIR, file);
   if (!full.startsWith(PUBLIC_DIR) || !fs.existsSync(full) || !fs.statSync(full).isFile()) { res.writeHead(404); return res.end('Not found'); }
   res.writeHead(200, { 'Content-Type': MIME[path.extname(full)] || 'application/octet-stream', 'X-Content-Type-Options': 'nosniff' });
@@ -177,7 +179,10 @@ const server = http.createServer(async (req, res) => {
     // ---------- STATIC PAGES ----------
     if (req.method === 'GET') {
       const routes = { '/': 'index.html', '/index.html': 'index.html', '/login': 'login.html', '/signup': 'signup.html', '/account': 'account.html', '/admin': 'admin.html' };
-      return serveStatic(res, routes[p] || p.replace(/^\/+/, ''));
+      let f = p.replace(/^\/+/, '');
+      if (f.startsWith('css/')) f = f.slice(4);
+      if (f.startsWith('js/')) f = f.slice(3);
+      return serveStatic(res, routes[p] || f);
     }
     res.writeHead(404); res.end('Not found');
   } catch (e) {
