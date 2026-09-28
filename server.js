@@ -5,6 +5,42 @@ const path = require('node:path');
 const { db, hashPassword, verifyPassword, getSetting, setSetting } = require('./db');
 const { createSession, destroySession, getSessionUser, rateLimit, validEmail, strongPassword } = require('./auth');
 
+// migration: add rzp_order_id column if missing
+try { db.prepare('SELECT rzp_order_id FROM orders LIMIT 1').get(); }
+catch { db.exec('ALTER TABLE orders ADD COLUMN rzp_order_id TEXT'); }
+
+// ---------- Razorpay helpers (inline) ----------
+const RZP_KEY_ID = process.env.RAZORPAY_KEY_ID || '';
+const RZP_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET || '';
+const rzpEnabled = () => !!(RZP_KEY_ID && RZP_KEY_SECRET);
+function rzpRequest(method, rpath, body) {
+  return new Promise((resolve, reject) => {
+    const data = body ? JSON.stringify(body) : null;
+    const rq = https.request({
+      hostname: 'api.razorpay.com', path: '/v1' + rpath, method,
+      auth: RZP_KEY_ID + ':' + RZP_KEY_SECRET,
+      headers: { 'Content-Type': 'application/json', ...(data ? { 'Content-Length': Buffer.byteLength(data) } : {}) },
+      timeout: 15000
+    }, res2 => {
+      let out = '';
+      res2.on('data', c => out += c);
+      res2.on('end', () => { try { resolve({ status: res2.statusCode, body: JSON.parse(out) }); } catch { reject(new Error('Bad Razorpay response')); } });
+    });
+    rq.on('error', reject);
+    rq.on('timeout', () => rq.destroy(new Error('Razorpay timeout')));
+    if (data) rq.write(data);
+    rq.end();
+  });
+}
+const rzpCreateOrder = (amountRupees, receipt) => rzpRequest('POST', '/orders', { amount: Math.round(amountRupees * 100), currency: 'INR', receipt, notes: { store: 'starx-store' } });
+const rzpPaymentFetch = id => rzpRequest('GET', '/payments/' + encodeURIComponent(id));
+function rzpVerifySig(oid, pid, sig) {
+  if (!oid || !pid || !sig) return false;
+  const expected = require('node:crypto').createHmac('sha256', RZP_KEY_SECRET).update(oid + '|' + pid).digest('hex');
+  try { return require('node:crypto').timingSafeEqual(Buffer.from(expected), Buffer.from(String(sig))); }
+  catch { return false; }
+}
+
 const PORT = process.env.PORT || 3000;
 const PUBLIC_DIR = __dirname;
 const MIME = { '.html':'text/html; charset=utf-8', '.css':'text/css', '.js':'text/javascript', '.png':'image/png', '.jpg':'image/jpeg', '.svg':'image/svg+xml', '.ico':'image/x-icon', '.json':'application/json' };
@@ -35,7 +71,7 @@ const server = http.createServer(async (req, res) => {
   try {
     // ---------- AUTH API ----------
     if (p === '/api/signup' && req.method === 'POST') {
-      if (!rateLimit('signup:' + ip, 5, 10 * 60000)) return json(res, 429, { error: 'Bahut zyada requests. Thodi der baad try karein.' });
+      if (!rateLimit('signup:' + ip, 15, 10 * 60000)) return json(res, 429, { error: 'Bahut zyada requests. Thodi der baad try karein.' });
       const b = await readBody(req);
       const name = clean(b.name), email = clean(b.email).toLowerCase(), pass = String(b.password || '');
       if (name.length < 2) return json(res, 400, { error: 'Naam kam se kam 2 letters ka hona chahiye.' });
@@ -50,7 +86,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (p === '/api/login' && req.method === 'POST') {
-      if (!rateLimit('login:' + ip, 8, 10 * 60000)) return json(res, 429, { error: 'Bahut zyada login attempts. 10 minute baad try karein.' });
+      if (!rateLimit('login:' + ip, 40, 10 * 60000)) return json(res, 429, { error: 'Bahut zyada attempts. 2 minute baad try karein.' });
       const b = await readBody(req);
       const email = clean(b.email).toLowerCase(), pass = String(b.password || '');
       const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
@@ -74,6 +110,44 @@ const server = http.createServer(async (req, res) => {
       const plans = db.prepare('SELECT id, name, emoji, price, duration, features FROM plans WHERE active = 1 ORDER BY price').all()
         .map(pl => ({ ...pl, features: JSON.parse(pl.features) }));
       return json(res, 200, { plans, upi_id: getSetting('upi_id'), whatsapp: getSetting('whatsapp') });
+    }
+
+
+    // ---------- PAYMENT GATEWAY (Razorpay) ----------
+    if (p === '/api/pay/create' && req.method === 'POST') {
+      const u = getSessionUser(req);
+      if (!u || u.blocked) return json(res, 401, { error: 'Login required.' });
+      if (!rzpEnabled()) return json(res, 400, { error: 'Payment gateway abhi configured nahi hai. Manual UPI se payment karein.' });
+      const b = await readBody(req);
+      const plan = db.prepare('SELECT * FROM plans WHERE id = ? AND active = 1').get(Number(b.plan_id));
+      if (!plan) return json(res, 400, { error: 'Plan valid nahi hai.' });
+      const r = db.prepare('INSERT INTO orders (user_id, plan_id, txn_id) VALUES (?,?,?)').run(u.id, plan.id, 'RZP_PENDING_' + Date.now());
+      const localId = r.lastInsertRowid;
+      const rz = await rzpCreateOrder(plan.price, 'starx-' + localId);
+      if (rz.status !== 200 || !rz.body.id) {
+        db.prepare('DELETE FROM orders WHERE id = ?').run(localId);
+        return json(res, 502, { error: 'Payment order create nahi hua. Dobara try karein.' });
+      }
+      db.prepare('UPDATE orders SET rzp_order_id = ? WHERE id = ?').run(rz.body.id, localId);
+      return json(res, 200, { order_id: localId, rzp_order_id: rz.body.id, amount: Math.round(plan.price * 100), key_id: RZP_KEY_ID, plan_name: plan.name, currency: 'INR' });
+    }
+
+    if (p === '/api/pay/verify' && req.method === 'POST') {
+      const u = getSessionUser(req);
+      if (!u || u.blocked) return json(res, 401, { error: 'Login required.' });
+      const b = await readBody(req);
+      const order = db.prepare('SELECT * FROM orders WHERE id = ? AND user_id = ?').get(Number(b.order_id), u.id);
+      if (!order || order.rzp_order_id !== b.razorpay_order_id) return json(res, 400, { error: 'Order mismatch.' });
+      if (order.status === 'paid' || order.status === 'delivered') return json(res, 200, { ok: true });
+      if (!rzpVerifySig(b.razorpay_order_id, b.razorpay_payment_id, b.razorpay_signature))
+        return json(res, 400, { error: 'Payment signature verify nahi hua.' });
+      // verify with Razorpay that payment actually belongs to this order and succeeded
+      const pay = await rzpPaymentFetch(b.razorpay_payment_id).catch(() => null);
+      const ok = pay && pay.status === 200 && pay.body.status === 'captured' && pay.body.order_id === b.razorpay_order_id;
+      if (!ok) return json(res, 400, { error: 'Payment confirm nahi hua.' });
+      db.prepare("UPDATE orders SET status = 'paid', txn_id = ?, admin_note = 'Auto-verified via Razorpay' WHERE id = ?")
+        .run(b.razorpay_payment_id, order.id);
+      return json(res, 200, { ok: true, message: 'Payment successful! Admin jaldi credentials deliver karega.' });
     }
 
     // ---------- USER ORDERS ----------
