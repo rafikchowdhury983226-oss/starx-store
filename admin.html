@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin Panel — StarX Store</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<nav class="nav"><div class="logo">STAR<span>X</span> <span style="font-size:.9rem;color:#999">ADMIN</span></div><div class="links"><a href="/">Store</a> <a href="#" id="lo">Logout</a></div></nav>
+<div class="admin-wrap">
+  <div class="admin-side">
+    <a data-tab="dash" class="active">📊 Dashboard</a>
+    <a data-tab="orders">📦 Orders</a>
+    <a data-tab="users">👥 Users</a>
+    <a data-tab="plans">🎫 Plans</a>
+    <a data-tab="settings">⚙️ Settings</a>
+  </div>
+  <div class="admin-main" id="main"></div>
+</div>
+<script src="/js/site.js"></script>
+<script>
+(async () => {
+  let me;
+  try { me = (await api('/api/me')).user; } catch {}
+  if (!me || me.blocked) return location.href = '/login';
+  if (me.role !== 'admin') return location.href = '/account';
+  document.getElementById('lo').onclick = async (e) => { e.preventDefault(); await api('/api/logout', { method: 'POST' }); location.href = '/'; };
+
+  const main = document.getElementById('main');
+  const tabs = document.querySelectorAll('.admin-side a');
+
+  async function dash() {
+    const { stats } = await api('/api/admin/stats');
+    main.innerHTML = `<h2>Dashboard</h2><div class="stat-grid">
+      <div class="stat"><div class="num">${stats.total_users}</div><div class="lbl">Total Users</div></div>
+      <div class="stat"><div class="num">${stats.pending_users}</div><div class="lbl">Pending Approvals</div></div>
+      <div class="stat"><div class="num">${stats.total_orders}</div><div class="lbl">Total Orders</div></div>
+      <div class="stat"><div class="num">${stats.pending_orders}</div><div class="lbl">Pending Orders</div></div>
+      <div class="stat"><div class="num">${money(stats.revenue)}</div><div class="lbl">Total Revenue (paid)</div></div>
+    </div>
+    <div class="card"><h3>🛡️ Security</h3><p style="color:#999;margin-top:8px">Fake/temp signins blocked: disposable emails reject hote hain, passwords strong hone chahiye, login attempts rate-limited hain, aur naye users approve hone tak login nahi kar sakte.</p></div>`;
+  }
+
+  async function orders() {
+    const { orders } = await api('/api/admin/orders');
+    main.innerHTML = '<h2>Orders</h2>' + (orders.length ? `<table>
+      <tr><th>ID</th><th>User</th><th>Plan</th><th>UTR</th><th>Status</th><th>Credentials / Note</th><th>Actions</th></tr>` +
+      orders.map(o => `<tr data-oid="${o.id}">
+        <td>#${o.id}<br><small style="color:#777">${esc(o.created_at)}</small></td>
+        <td>${esc(o.user_name)}<br><small style="color:#777">${esc(o.user_email)}</small></td>
+        <td>${esc(o.plan_name)}<br><small>${money(o.price)} / ${esc(o.duration)}</small></td>
+        <td>${esc(o.txn_id)}</td>
+        <td><span class="badge ${esc(o.status)}">${esc(o.status.toUpperCase())}</span></td>
+        <td><input class="inline creds" style="width:170px" placeholder="user:pass / link" value="${esc(o.credentials || '')}"><br>
+            <input class="inline note" style="width:170px;margin-top:4px" placeholder="note (optional)" value="${esc(o.admin_note || '')}"></td>
+        <td class="row-actions">
+          <button class="btn small" data-st="paid">Paid</button>
+          <button class="btn small" data-st="delivered">Deliver</button>
+          <button class="btn small gray" data-st="rejected">Reject</button>
+        </td></tr>`).join('') + '</table>'
+      : '<p style="color:#888">Koi order nahi hai.</p>');
+    main.querySelectorAll('tr[data-oid] .btn').forEach(btn => btn.onclick = async () => {
+      const tr = btn.closest('tr');
+      await api('/api/admin/order', { method: 'POST', body: {
+        id: Number(tr.dataset.oid), status: btn.dataset.st,
+        credentials: tr.querySelector('.creds').value, admin_note: tr.querySelector('.note').value
+      }});
+      orders();
+    });
+  }
+
+  async function users() {
+    const { users } = await api('/api/admin/users');
+    main.innerHTML = '<h2>Users</h2>' + `<table>
+      <tr><th>ID</th><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Orders</th><th>Joined</th><th>Actions</th></tr>` +
+      users.map(u => `<tr><td>${u.id}</td><td>${esc(u.name)}</td><td>${esc(u.email)}</td><td>${esc(u.role)}</td>
+        <td><span class="badge ${esc(u.status)}">${esc(u.status.toUpperCase())}</span></td>
+        <td>${u.order_count}</td><td>${esc(u.created_at)}</td>
+        <td class="row-actions">${u.role !== 'admin' ? (
+          u.status !== 'active' ? `<button class="btn small" data-uid="${u.id}" data-st="active">Approve</button>` : '') +
+          (u.status !== 'blocked' ? `<button class="btn small gray" data-uid="${u.id}" data-st="blocked">Block</button>` : '') +
+          (u.status !== 'pending' ? `<button class="btn small gray" data-uid="${u.id}" data-st="pending">Un-verify</button>` : '')
+          : '<span style="color:#777">—</span>'}</td></tr>`).join('') + '</table>';
+    main.querySelectorAll('button[data-uid]').forEach(btn => btn.onclick = async () => {
+      await api('/api/admin/user-status', { method: 'POST', body: { id: Number(btn.dataset.uid), status: btn.dataset.st } });
+      users();
+    });
+  }
+
+  async function plans() {
+    const { plans } = await api('/api/admin/plans');
+    main.innerHTML = `<h2>Plans</h2>
+      <div class="card" style="margin-bottom:18px"><h3>➕ Naya Plan Add Karein</h3>
+        <div class="row-actions" style="margin-top:10px">
+          <input class="inline np-emoji" style="width:60px" placeholder="🎬">
+          <input class="inline np-name" style="width:180px" placeholder="Plan ka naam">
+          <input class="inline np-price" style="width:90px" type="number" placeholder="₹ Price">
+          <input class="inline np-dur" style="width:130px" placeholder="1 Month">
+          <input class="inline np-feat" style="width:320px" placeholder="Features (comma se alag karein)">
+          <button class="btn small" id="addPlan">Add</button>
+        </div></div>
+      <table><tr><th>ID</th><th>Plan</th><th>Price</th><th>Duration</th><th>Features</th><th>Status</th><th>Actions</th></tr>` +
+      plans.map(p => `<tr data-pid="${p.id}">
+        <td>${p.id}</td>
+        <td><input class="inline p-emoji" style="width:50px" value="${esc(p.emoji)}"> <input class="inline p-name" style="width:150px" value="${esc(p.name)}"></td>
+        <td><input class="inline p-price" style="width:80px" type="number" value="${p.price}"></td>
+        <td><input class="inline p-dur" style="width:110px" value="${esc(p.duration)}"></td>
+        <td><input class="inline p-feat" style="width:280px" value="${esc(p.features.join(', '))}"></td>
+        <td><span class="badge ${p.active ? 'delivered' : 'blocked'}">${p.active ? 'ACTIVE' : 'HIDDEN'}</span></td>
+        <td class="row-actions"><button class="btn small" data-act="save">Save</button>
+          ${p.active ? '<button class="btn small gray" data-act="hide">Hide</button>' : '<button class="btn small gray" data-act="restore">Restore</button>'}</td></tr>`).join('') + '</table>';
+    document.getElementById('addPlan').onclick = async () => {
+      const g = c => main.querySelector('.np-' + c).value;
+      try {
+        await api('/api/admin/plan', { method: 'POST', body: { name: g('name'), emoji: g('emoji'), price: Number(g('price')), duration: g('dur'), features: g('feat').split(',').map(s => s.trim()).filter(Boolean) } });
+        plans();
+      } catch (err) { alert(err.message); }
+    };
+    main.querySelectorAll('tr[data-pid] .btn').forEach(btn => btn.onclick = async () => {
+      const tr = btn.closest('tr'), id = Number(tr.dataset.pid);
+      if (btn.dataset.act === 'hide') { await api('/api/admin/plan-delete', { method: 'POST', body: { id } }); return plans(); }
+      if (btn.dataset.act === 'restore') { await api('/api/admin/plan', { method: 'POST', body: { id, name: tr.querySelector('.p-name').value, emoji: tr.querySelector('.p-emoji').value, price: Number(tr.querySelector('.p-price').value), duration: tr.querySelector('.p-dur').value, features: tr.querySelector('.p-feat').value.split(',').map(s => s.trim()).filter(Boolean), active: true } }); return plans(); }
+      await api('/api/admin/plan', { method: 'POST', body: { id, name: tr.querySelector('.p-name').value, emoji: tr.querySelector('.p-emoji').value, price: Number(tr.querySelector('.p-price').value), duration: tr.querySelector('.p-dur').value, features: tr.querySelector('.p-feat').value.split(',').map(s => s.trim()).filter(Boolean), active: true } });
+      plans();
+    });
+  }
+
+  async function settings() {
+    const { settings } = await api('/api/admin/settings');
+    main.innerHTML = `<h2>Settings</h2><div class="card" style="max-width:500px">
+      <h3>Payment Details</h3>
+      <label style="display:block;margin:12px 0 5px;color:#aaa">UPI ID</label>
+      <input id="upi" class="inline" style="width:100%" value="${esc(settings.upi_id)}">
+      <label style="display:block;margin:12px 0 5px;color:#aaa">WhatsApp / Support Number</label>
+      <input id="wa" class="inline" style="width:100%" value="${esc(settings.whatsapp)}">
+      <button class="btn" style="margin-top:16px" id="saveSet">Save</button>
+      <div class="msg" id="sm"></div>
+    </div>`;
+    document.getElementById('saveSet').onclick = async () => {
+      await api('/api/admin/settings', { method: 'POST', body: { upi_id: upi.value, whatsapp: wa.value } });
+      showMsg(document.getElementById('sm'), 'Saved!', true);
+    };
+  }
+
+  const render = { dash, orders, users, plans, settings };
+  tabs.forEach(t => t.onclick = () => {
+    tabs.forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    render[t.dataset.tab]();
+  });
+  dash();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign Up — StarX Store</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<nav class="nav"><div class="logo">STAR<span>X</span> STORE</div><div class="links"><a href="/">Home</a> <a href="/login">Login</a></div></nav>
+<div class="auth-card">
+  <h2>Create Account</h2>
+  <form id="f">
+    <label>Naam</label><input id="name" required maxlength="60">
+    <label>Email</label><input id="email" type="email" required>
+    <label>Password (8+ chars, letter + number)</label><input id="pass" type="password" required minlength="8">
+    <button class="btn">Sign Up</button>
+    <div class="msg" id="m"></div>
+    <p class="note">Pehle se account hai? <a href="/login">Login karein</a></p>
+    <p class="note" style="color:#777">🔒 Temporary/fake email se signup blocked hai. Naya account admin approval ke baad active hota hai.</p>
+  </form>
+</div>
+<script src="/js/site.js"></script>
+<script>
+document.getElementById('f').onsubmit = async (e) => {
+  e.preventDefault();
+  const m = document.getElementById('m');
+  try {
+    const r = await api('/api/signup', { method: 'POST', body: { name: name.value, email: email.value, password: pass.value } });
+    showMsg(m, r.message, true);
+    setTimeout(() => location.href = '/login', 1800);
+  } catch (err) { showMsg(m, err.message, false); }
+};
+</script>
+</body>
+</html>

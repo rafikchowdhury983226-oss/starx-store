@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>StarX Store — Premium OTT Subscriptions</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<nav class="nav">
+  <div class="logo">STAR<span>X</span> STORE</div>
+  <div class="links" id="navlinks"></div>
+</nav>
+<div class="hero">
+  <h1>Premium OTT Subscriptions <em>Sasti Mein</em></h1>
+  <p>Netflix, Prime Video, Disney+ Hotstar, Spotify aur bhi bahut kuch — 100% genuine plans, instant delivery, full warranty.</p>
+  <a href="#plans" class="btn">Plans Dekhein</a>
+</div>
+<div class="section" id="plans">
+  <h2>🔥 Available Plans</h2>
+  <div class="plans" id="planGrid"><p>Plans load ho rahe hain…</p></div>
+</div>
+<div class="section" style="max-width:900px">
+  <h2>ℹ️ Kaise kaam karta hai?</h2>
+  <div class="plans">
+    <div class="card"><div class="emoji">1️⃣</div><h3>Account Banao</h3><p style="color:#999">Signup karein — admin approval ke baad login hoga (fake accounts block ho jaate hain).</p></div>
+    <div class="card"><div class="emoji">2️⃣</div><h3>Payment Karein</h3><p style="color:#999">UPI se payment karein aur transaction ID ke saath order place karein.</p></div>
+    <div class="card"><div class="emoji">3️⃣</div><h3>Deliver Lein</h3><p style="color:#999">Admin verify karke aapke account mein credentials deliver karega.</p></div>
+  </div>
+</div>
+<footer>© 2026 StarX Store — All rights reserved.</footer>
+<script src="/js/site.js"></script>
+<script>
+(async () => {
+  // nav based on session
+  let user = null;
+  try { user = (await api('/api/me')).user; } catch {}
+  const nav = document.getElementById('navlinks');
+  nav.innerHTML = user && !user.blocked
+    ? (user.role === 'admin' ? '<a href="/admin">Admin Panel</a>' : '') + '<a href="/account">My Account</a> <a href="#" id="lo">Logout</a>'
+    : '<a href="/login">Login</a> <a href="/signup" class="btn" style="margin-left:14px">Sign Up</a>';
+  const lo = document.getElementById('lo');
+  if (lo) lo.onclick = async (e) => { e.preventDefault(); await api('/api/logout', { method: 'POST' }); location.href = '/'; };
+
+  const { plans, upi_id, whatsapp } = await api('/api/plans');
+  const grid = document.getElementById('planGrid');
+  grid.innerHTML = plans.length ? '' : '<p style="color:#888">Abhi koi plan available nahi hai.</p>';
+  for (const p of plans) {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.innerHTML = `
+      <div class="emoji">${esc(p.emoji)}</div>
+      <h3>${esc(p.name)}</h3>
+      <div class="price">${money(p.price)} <small>/ ${esc(p.duration)}</small></div>
+      <ul>${p.features.map(f => `<li>${esc(f)}</li>`).join('')}</ul>
+      <button class="btn">Order Karein</button>`;
+    card.querySelector('button').onclick = () => {
+      if (!user || user.blocked) { location.href = '/login'; return; }
+      sessionStorage.setItem('orderPlan', p.id);
+      location.href = '/account';
+    };
+    grid.appendChild(card);
+  }
+})();
+</script>
+</body>
+</html>

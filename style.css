@@ -1,0 +1,59 @@
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:'Segoe UI',Arial,sans-serif; background:#0b0b0f; color:#eee; min-height:100vh; }
+a { color:#e50914; text-decoration:none; }
+.nav { display:flex; align-items:center; justify-content:space-between; padding:14px 5%; background:rgba(11,11,15,.95); position:sticky; top:0; z-index:10; border-bottom:1px solid #222; }
+.logo { font-size:1.6rem; font-weight:800; color:#e50914; letter-spacing:1px; }
+.logo span { color:#fff; }
+.nav .links a { margin-left:18px; color:#ccc; font-weight:600; }
+.nav .links a:hover { color:#fff; }
+.btn { display:inline-block; background:#e50914; color:#fff; border:none; padding:10px 22px; border-radius:6px; font-weight:700; cursor:pointer; font-size:1rem; }
+.btn:hover { background:#c4080f; }
+.btn.gray { background:#333; }
+.btn.small { padding:6px 12px; font-size:.85rem; }
+.hero { text-align:center; padding:70px 5% 40px; background:linear-gradient(180deg,#160208,#0b0b0f); }
+.hero h1 { font-size:2.6rem; margin-bottom:12px; }
+.hero h1 em { color:#e50914; font-style:normal; }
+.hero p { color:#aaa; max-width:600px; margin:0 auto 24px; }
+.section { padding:40px 5%; }
+.section h2 { margin-bottom:20px; font-size:1.5rem; }
+.plans { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:18px; max-width:1100px; margin:0 auto; }
+.card { background:#16161d; border:1px solid #2a2a35; border-radius:12px; padding:22px; transition:transform .15s; }
+.card:hover { transform:translateY(-4px); border-color:#e50914; }
+.card .emoji { font-size:2rem; }
+.card h3 { margin:8px 0 4px; }
+.card .price { font-size:1.6rem; font-weight:800; color:#e50914; }
+.card .price small { color:#888; font-size:.85rem; font-weight:400; }
+.card ul { list-style:none; margin:14px 0; }
+.card li { padding:5px 0; color:#bbb; }
+.card li::before { content:'✓ '; color:#2ecc71; font-weight:700; }
+.auth-card { max-width:420px; margin:60px auto; background:#16161d; border:1px solid #2a2a35; border-radius:12px; padding:32px; }
+.auth-card h2 { margin-bottom:18px; }
+.auth-card label { display:block; margin:12px 0 5px; font-size:.9rem; color:#aaa; }
+.auth-card input, .auth-card select, .auth-card textarea { width:100%; padding:11px; border-radius:6px; border:1px solid #333; background:#0e0e13; color:#fff; font-size:1rem; }
+.auth-card .btn { width:100%; margin-top:18px; }
+.note { margin-top:14px; font-size:.9rem; color:#999; text-align:center; }
+.msg { margin-top:12px; padding:10px; border-radius:6px; font-size:.92rem; display:none; }
+.msg.err { display:block; background:#3d0b0e; color:#ff8a8a; }
+.msg.ok { display:block; background:#0e2f16; color:#8aff9f; }
+table { width:100%; border-collapse:collapse; background:#16161d; border-radius:8px; overflow:hidden; }
+th, td { padding:10px 12px; text-align:left; border-bottom:1px solid #26262f; font-size:.92rem; }
+th { background:#1e1e28; color:#ccc; }
+.badge { padding:3px 10px; border-radius:12px; font-size:.75rem; font-weight:700; }
+.badge.pending { background:#5a4a10; color:#ffd866; }
+.badge.paid { background:#14406b; color:#7ec8ff; }
+.badge.delivered { background:#0e4d21; color:#7dffa0; }
+.badge.rejected, .badge.blocked { background:#5a1418; color:#ff9a9a; }
+.badge.active { background:#0e4d21; color:#7dffa0; }
+.admin-wrap { display:flex; min-height:calc(100vh - 57px); }
+.admin-side { width:210px; background:#121218; padding:20px 0; border-right:1px solid #222; flex-shrink:0; }
+.admin-side a { display:block; padding:12px 22px; color:#bbb; font-weight:600; cursor:pointer; }
+.admin-side a.active, .admin-side a:hover { color:#fff; background:#e50914; }
+.admin-main { flex:1; padding:26px 3%; overflow-x:auto; }
+.stat-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:14px; margin-bottom:24px; }
+.stat { background:#16161d; border:1px solid #2a2a35; border-radius:10px; padding:16px; }
+.stat .num { font-size:1.7rem; font-weight:800; color:#e50914; }
+.stat .lbl { color:#999; font-size:.85rem; }
+.row-actions { display:flex; gap:6px; flex-wrap:wrap; }
+input.inline { padding:7px; border-radius:5px; border:1px solid #333; background:#0e0e13; color:#fff; }
+footer { text-align:center; padding:26px; color:#666; font-size:.85rem; }
+@media(max-width:700px){ .admin-wrap{flex-direction:column} .admin-side{width:100%;display:flex;overflow-x:auto} .admin-side a{white-space:nowrap} }

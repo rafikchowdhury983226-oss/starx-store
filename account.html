@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>My Account — StarX Store</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<nav class="nav"><div class="logo">STAR<span>X</span> STORE</div><div class="links" id="navlinks"></div></nav>
+<div class="section" style="max-width:1000px;margin:0 auto">
+  <h2 id="welcome">My Orders</h2>
+  <div class="card" style="margin-bottom:24px" id="orderForm">
+    <h3>🛒 Naya Order</h3>
+    <p id="payinfo" style="color:#999;margin:8px 0 14px"></p>
+    <label style="color:#aaa;display:block;margin-bottom:5px">Plan</label>
+    <select id="planSel" style="width:100%;padding:11px;border-radius:6px;border:1px solid #333;background:#0e0e13;color:#fff"></select>
+    <label style="color:#aaa;display:block;margin:12px 0 5px">UPI Transaction / UTR ID</label>
+    <input id="txn" style="width:100%;padding:11px;border-radius:6px;border:1px solid #333;background:#0e0e13;color:#fff" maxlength="60">
+    <button class="btn" style="margin-top:14px" id="placeBtn">Order Place Karein</button>
+    <div class="msg" id="om"></div>
+  </div>
+  <h2>Order History</h2>
+  <div id="orders"></div>
+</div>
+<footer>© 2026 StarX Store</footer>
+<script src="/js/site.js"></script>
+<script>
+(async () => {
+  let me;
+  try { me = (await api('/api/me')).user; } catch {}
+  if (!me || me.blocked) return location.href = '/login';
+  document.getElementById('navlinks').innerHTML = '<a href="/">Home</a> <a href="#" id="lo">Logout</a>';
+  document.getElementById('lo').onclick = async (e) => { e.preventDefault(); await api('/api/logout', { method: 'POST' }); location.href = '/'; };
+  document.getElementById('welcome').textContent = 'My Orders — ' + me.name;
+
+  const { plans, upi_id, whatsapp } = await api('/api/plans');
+  const sel = document.getElementById('planSel');
+  sel.innerHTML = plans.map(p => `<option value="${p.id}">${esc(p.name)} — ${money(p.price)} / ${esc(p.duration)}</option>`).join('');
+  document.getElementById('payinfo').innerHTML = upi_id
+    ? `💳 Payment karein: UPI ID <b style="color:#fff">${esc(upi_id)}</b> par plan ki amount bhejein${whatsapp ? ` | WhatsApp: <b style="color:#fff">${esc(whatsapp)}</b>` : ''}, phir UTR ID daal kar order place karein.`
+    : 'Payment details admin jald set karega.';
+
+  document.getElementById('placeBtn').onclick = async () => {
+    const m = document.getElementById('om');
+    try {
+      const r = await api('/api/orders', { method: 'POST', body: { plan_id: Number(sel.value), txn_id: txn.value } });
+      showMsg(m, r.message, true); txn.value = ''; loadOrders();
+    } catch (err) { showMsg(m, err.message, false); }
+  };
+
+  async function loadOrders() {
+    const { orders } = await api('/api/my-orders');
+    const box = document.getElementById('orders');
+    if (!orders.length) { box.innerHTML = '<p style="color:#888">Abhi koi order nahi hai.</p>'; return; }
+    box.innerHTML = `<table><tr><th>Order</th><th>Plan</th><th>Amount</th><th>UTR</th><th>Status</th><th>Credentials</th></tr>` +
+      orders.map(o => `<tr><td>#${o.id}<br><small style="color:#777">${esc(o.created_at)}</small></td>
+        <td>${esc(o.plan_name)}</td><td>${money(o.price)}</td><td>${esc(o.txn_id)}</td>
+        <td><span class="badge ${esc(o.status)}">${esc(o.status.toUpperCase())}</span>${o.admin_note ? '<br><small style="color:#999">' + esc(o.admin_note) + '</small>' : ''}</td>
+        <td>${o.status === 'delivered' && o.credentials ? `<b style="color:#7dffa0">${esc(o.credentials)}</b>` : '—'}</td></tr>`).join('') + '</table>';
+  }
+  loadOrders();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Login — StarX Store</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<nav class="nav"><div class="logo">STAR<span>X</span> STORE</div><div class="links"><a href="/">Home</a> <a href="/signup">Sign Up</a></div></nav>
+<div class="auth-card">
+  <h2>Login</h2>
+  <form id="f">
+    <label>Email</label><input id="email" type="email" required>
+    <label>Password</label><input id="pass" type="password" required>
+    <button class="btn">Login</button>
+    <div class="msg" id="m"></div>
+    <p class="note">Naya user? <a href="/signup">Account banayein</a></p>
+  </form>
+</div>
+<script src="/js/site.js"></script>
+<script>
+document.getElementById('f').onsubmit = async (e) => {
+  e.preventDefault();
+  const m = document.getElementById('m');
+  try {
+    const r = await api('/api/login', { method: 'POST', body: { email: email.value, password: pass.value } });
+    location.href = r.role === 'admin' ? '/admin' : '/account';
+  } catch (err) { showMsg(m, err.message, false); }
+};
+</script>
+</body>
+</html>
